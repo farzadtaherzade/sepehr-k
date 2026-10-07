@@ -1,20 +1,228 @@
-# Centralized Project Data Platform (EVM)
+# Centralized Project Data Platform (EVM) — پلتفرم داده پروژه‌ها
 
-From a wide Excel workbook to a normalized PostgreSQL platform with spreadsheet-style
-data entry (NocoDB) and a natural-language analytics agent.
+A fully containerized, Persian-language (RTL) Earned-Value-Management platform built
+from a wide Excel workbook (`14050617-Dashboards.xlsm`):
 
 ```
-Excel (Master Database)
-        │  migration/migrate.py  (one-off, idempotent)
+Excel (Master Database, 83 Persian columns)
+        │  migration/migrate.py   (one-off, idempotent)
         ▼
-   PostgreSQL  ◄──── NocoDB (same DB, Form View for monthly reports)
-        │
-        ▼
- Analytics Agent (Text-to-SQL + Claude explanation)
+   PostgreSQL 16 (evm_db)  ◄─── live summary triggers (counts, last SPI/CPI, ...)
+    │          │
+    ▼          ▼
+ Directus   Next.js Web App     ◄─ both Persian, RTL, Jalali dates, Persian digits
+ (admin +      (management UI)
+  Insights)
+    ▲
+    └── Analytics Agent (Text-to-SQL, read-only) — agent/
 ```
 
-No vector database is used: all analysis is structured/numeric. If narrative
-documents are added later, enable `pgvector` on this same instance.
+Everything runs from **one `docker compose up -d`** — no host-installed services.
+
+---
+
+## Services & Ports
+
+| Service | Container | URL / Port | What it does |
+|---|---|---|---|
+| **Directus 11** | `evm-directus` | http://localhost:8080 | Persian admin UI, data entry, Insights dashboards, map view |
+| **Web App** (Next.js) | `evm-webapp` | http://localhost:3600 | Persian RTL management UI (projects, reports, headcount, audit) |
+| **PostgreSQL 16** | `evm-postgres` | localhost:5433 | Single database `evm_db` shared by Directus + webapp |
+| **Backup** | `evm-postgres-backup` | — | Nightly `pg_dump` → `./backups/` (14 daily / 8 weekly / 6 monthly) |
+
+> **Why port 3600?** Host port 3000 is reserved by Windows on this machine, so the
+> web app is exposed on 3600 (container still listens on 3000). Postgres uses 5433
+> for the same reason (local 5432 occupied). Inside the Docker network everything
+> uses the standard ports.
+
+---
+
+## Quick Start (3 commands)
+
+**Requirements:** [Docker Desktop](https://www.docker.com/products/docker-desktop/) with
+Compose v2. (Windows: start Docker Desktop first — the containers come back on their own
+via `restart: unless-stopped`.)
+
+```bash
+cp .env.example .env        # then edit: set strong passwords + 3 secrets
+docker compose up -d        # first boot: builds the webapp, pulls 2 images
+docker compose ps           # wait until all show "healthy"
+```
+
+Generate the secrets with `openssl rand -hex 32`:
+
+| `.env` variable | Used for |
+|---|---|
+| `POSTGRES_PASSWORD` | database owner |
+| `DIRECTUS_KEY` / `DIRECTUS_SECRET` | Directus instance id / session signing |
+| `AUTH_SECRET` | webapp session cookies |
+| `EVM_APP_PASSWORD` | least-privilege `evm_app` role (auto-created at webapp startup) |
+
+**First-run accounts (created once, on empty database):**
+
+| App | Login | Notes |
+|---|---|---|
+| Web App (3600) | `ADMIN_USERNAME` / `ADMIN_PASSWORD` from `.env` | forces a password change on first login |
+| Directus (8080) | `DIRECTUS_ADMIN_EMAIL` / `DIRECTUS_ADMIN_PASSWORD` from `.env` | created only on very first boot |
+
+---
+
+## Getting the Data In
+
+**Option 1 — migrate the real workbook** (idempotent; re-runs update, never duplicate):
+
+```bash
+python migration/migrate.py --inspect "path/to/14050617-Dashboards.xlsm"   # inspect mapping
+python migration/migrate.py "path/to/14050617-Dashboards.xlsm" --dry-run   # dry run
+python migration/migrate.py "path/to/14050617-Dashboards.xlsm"             # migrate
+```
+
+Column mapping lives in `migration/mapping.yaml` (regex per Persian header) — edit the
+yaml, not the code. No workbook at hand? `python migration/make_sample_excel.py`.
+
+**Option 2 — restore a database dump** from the machine that already has the data
+(see *Sharing with a friend* below — this also carries the whole Directus
+configuration, users, theme and dashboards).
+
+### Directus configuration on a fresh database
+
+Directus stores its data model, field labels, dashboards and theme **inside the
+database**. On a truly fresh install you get an empty admin. Two paths:
+
+- **Full fidelity (recommended):** restore a full DB dump (below) — you get the
+  configured Persian data model, users, Insights dashboards, map bookmark, theme,
+  fonts and all data, exactly as on the source machine.
+- **From scratch:** log into Directus, create a static token for your admin user
+  (User ▸ Token), then run:
+
+  ```bash
+  DX_TOKEN=<static token> python directus/config/apply_model.py
+  ```
+
+  This configures all collections, Persian/English labels, relations, form groups,
+  the Jalali date column and default views (idempotent, additive-only). The
+  `fa-display` extension (Jalali dates + Persian digits) is already in the repo at
+  `directus/extensions/` and mounts automatically. The map bookmark and Insights
+  dashboards are simple to recreate, or copy them from a dump.
+
+---
+
+## What You Get
+
+- **7 normalized collections** — projects → contract revisions/extensions → periodic
+  snapshots → per-REV progress + per-trade headcount (adding a REV4 or a new trade
+  never needs a schema change).
+- **Live summary columns** (`db/schema.sql` triggers): report count, last report date,
+  latest progress/SPI/CPI and contract amounts on every project; total headcount per
+  report; usage stats per trade. Always current, regardless of what writes the data.
+- **Persian everything**: RTL app language, Vazirmatn font + teal theme, Jalali/Shamsi
+  dates and Persian digits (custom display extension `directus/extensions/fa-display`),
+  bilingual (fa/en) field names.
+- **Insights dashboards** «نمای کلی پروژه‌ها» and «نیروی انسانی»: KPIs, per-project
+  progress/report bars, headcount by trade/project, SPI trend.
+- **Map view**: bookmark «نقشه پروژه‌ها» shows projects with coordinates
+  (`dim_project.location`, GeoJSON). Editing pins is a full-width map field on each
+  project.
+- **Guided data-entry flow**: create project → add report from the project page
+  (project pre-filled, date defaults to today, REV defaults 0) → fill headcount /
+  per-REV rows inline.
+- **Analysis views** for the agent and the webapp: `v_project_latest_snapshot`,
+  `v_evm_distress_alerts`, `v_snapshot_total_headcount`, `v_project_revision_progress`,
+  `v_project_reporting_status`.
+
+---
+
+## Sharing with a Friend
+
+> The friend needs Docker Desktop and (on networks where Docker Hub is blocked) either a
+> registry mirror or the pre-pulled images — see *Troubleshooting* at the bottom.
+
+### Option A — Git + a full database dump (recommended)
+
+Everything is already committed locally (branch `feature/samples-and-map`). Push it:
+
+```bash
+# one-time: create a PRIVATE repo on GitHub/GitLab, then
+git remote add origin <your-repo-url>
+git push -u origin main feature/samples-and-map
+```
+
+Your friend:
+
+```bash
+git clone <your-repo-url> && cd evm-platform
+git checkout feature/samples-and-map
+cp .env.example .env           # set their own passwords/secrets (any values work
+                               # except POSTGRES_*, which must match the dump restore)
+docker compose up -d postgres  # start the database first
+```
+
+Then copy the dump from you and restore it **before** starting the rest:
+
+```bash
+docker cp evm_full.dump evm-postgres:/tmp/
+docker exec evm-postgres pg_restore -U evm_admin -d evm_db --clean --if-exists /tmp/evm_full.dump
+docker compose up -d           # Directus + webapp come up already configured
+```
+
+**You** create the dump (it carries data *and* all Directus configuration, users,
+theme, dashboards):
+
+```bash
+docker exec evm-postgres pg_dump -U evm_admin -d evm_db -Fc -f /tmp/evm_full.dump
+docker cp evm-postgres:/tmp/evm_full.dump ./evm_full.dump
+```
+
+> Only `POSTGRES_PASSWORD` has to match between your `.env` and your friend's (the
+> dump carries the roles' passwords). Everything else — keys, secrets — can differ.
+
+### Option B — zip the folder
+
+Zip the project **without** `.env`, `node_modules/`, `backups/` (they're git-ignored
+anyway) plus `evm_full.dump`. Friend unzips → same steps as Option A. Simple, but
+they won't get your future commits.
+
+### Option C — live access over the internet (no install for the friend)
+
+```bash
+./expose-public-url.sh        # tunnels https://<random>.lhr.life -> localhost:8080
+./expose-public-url.sh --stop # when done
+```
+
+Your friend opens the printed HTTPS URL and uses your **existing Directus login** —
+no setup at all. Caveats: the URL is public and rotates on restart; Directus (not the
+webapp) is what gets exposed; stop the tunnel when finished.
+
+### What the friend will NOT get from git alone
+
+Directus configuration and your data live in the database volume, not in the repo —
+that's why the dump matters. The repo *does* include the whole schema (`db/schema.sql`,
+auto-applied on first boot), the Excel migration, and the `fa-display` extension.
+
+---
+
+## Deploying to a Server
+
+Same as Quick Start on a Linux host with Docker: set **production** secrets in `.env`,
+`docker compose up -d`, put Directus/webapp behind a TLS reverse proxy, verify backups
+appear in `./backups/`, and change `analytics_readonly`'s password from
+`db/schema.sql` (or `ALTER ROLE`).
+
+---
+
+## Analytics Agent (read-only Text-to-SQL)
+
+```bash
+pip install -r agent/requirements.txt
+# agent/.env:
+#   ANALYTICS_DB_URL=postgresql://analytics_readonly:readonly_secret_pass@localhost:5433/evm_db
+#   ANTHROPIC_API_KEY=sk-ant-...
+python agent/cli.py "which projects have CPI below 0.9?"
+python agent/cli.py --checks    # deviation report (cost overrun, schedule slip, headcount)
+```
+
+Two safety layers: the `analytics_readonly` role (SELECT-only grants), and a guard that
+only ever runs a single `SELECT`/`WITH` in a `READ ONLY` transaction with a 15 s timeout.
 
 ---
 
@@ -22,322 +230,76 @@ documents are added later, enable `pgvector` on this same instance.
 
 | Path | What it is |
 |---|---|
-| `db/schema.sql` | All 6 tables, indexes, 3 analysis views, seed trades, read-only role |
-| `docker-compose.yml` | PostgreSQL + nightly backup + NocoDB |
+| `db/schema.sql` | All tables, indexes, 5 analysis views, summary triggers, seed trades, read-only role (auto-applied on first boot; idempotent) |
+| `docker-compose.yml` | postgres + postgres-backup + directus + webapp |
 | `.env.example` | Configuration template (copy to `.env`) |
-| `migration/migrate.py` | Excel → Postgres migration (normalizes REV0-3 and trade columns into rows) |
-| `migration/mapping.yaml` | Excel-header → DB-column mapping (edit this, not the code) |
-| `migration/make_sample_excel.py` | Generates a synthetic Master Database for testing |
-| `agent/db.py` | Read-only SQL layer (SELECT-only guard + readonly role) |
-| `agent/agent.py` | The Analytics Agent (schema tool + SQL tool + Claude reasoning) |
-| `agent/cli.py` | Command-line entry point |
-| `nocodb/setup_instructions.md` | Step-by-step NocoDB form + role configuration |
-| `backup/backup.sh` | Manual on-demand dump (nightly runs automatically) |
+| `webapp/` | Next.js Persian management app (Dockerfile included) |
+| `directus/config/apply_model.py` | Idempotent Directus data-model configurator |
+| `directus/extensions/fa-display/` | Installed display extension: Jalali dates + Persian digits |
+| `directus/extensions-src/` | Extension source — `npm install && npx directus-extension build` |
+| `directus/setup_instructions.md` | Full change log: data model, styling, dashboards, map, entry flow (§11–17) |
+| `migration/migrate.py` + `mapping.yaml` | Excel → Postgres migration (regex mapping) |
+| `agent/` | Read-only analytics agent (Text-to-SQL) |
+| `backup/backup.sh` / `export.sh` | Manual dump / CSV+SQL export of the 7 platform tables |
+| `expose-public-url.sh` | One-command public HTTPS tunnel |
 
 ---
 
-## Step 1 — Configuration
+## Schema Notes (read before querying)
 
-```bash
-cd evm-platform
-cp .env.example .env
-```
-
-Edit `.env` and set a strong `POSTGRES_PASSWORD`, then generate a JWT secret:
-
-```bash
-openssl rand -hex 32
-```
-
-> **Port note:** `POSTGRES_HOST_PORT` defaults to **5433** because port 5432 is
-> commonly already taken by a locally installed PostgreSQL service. Inside the
-> Docker network Postgres is always on 5432, so NocoDB is unaffected.
-
----
-
-## Step 2 — Start the Stack
-
-```bash
-docker compose up -d
-```
-
-This starts three services:
-
-1. **postgres** — PostgreSQL 16, persistent volume, `db/schema.sql` applied
-   automatically on first start.
-2. **postgres-backup** — nightly `pg_dump`, gzip-compressed, into `./backups`
-   (14 daily / 8 weekly / 6 monthly retained).
-3. **nocodb** — the data-entry UI, pointed at the **same** `evm_db`.
-
-Check health:
-
-```bash
-docker compose ps
-docker compose logs -f postgres
-```
-
----
-
-## Step 3 — Migrate the Excel Data
-
-First, see what the workbook actually contains:
-
-```bash
-# Your workbook is a macro-enabled .xlsm - migrate.py handles it directly.
-python migration/migrate.py --inspect "C:\Users\farza\Music\14050617-Dashboards.xlsm"
-```
-
-The mapping in `mapping.yaml` is already written against that workbook's real
-Persian headers, so the dry run should map 27 snapshot fields, 4 contract
-revisions, 3 extensions, 18 headcount columns, and 6 per-revision series
-(progress physical/rial actual/planned + EV + PV, each for REV0-REV3).
-
-Then do a dry run to confirm the column mapping before writing anything:
-
-```bash
-python migration/migrate.py /path/to/Master_Database.xlsx --dry-run
-```
-
-The dry run prints every detected mapping: which Excel header feeds which DB
-column, which revisions/extensions were found, and how many headcount columns
-were recognized. **Check this output against the real file.**
-
-If something is unmatched, add a regex to `migration/mapping.yaml` — no code
-changes needed. Then run for real:
-
-```bash
-python migration/migrate.py /path/to/Master_Database.xlsx
-```
-
-> Without the real file to hand, generate a synthetic one to exercise the
-> whole path end-to-end: `python migration/make_sample_excel.py`
-
-The migration is **idempotent**: re-running updates rather than duplicating
-(projects are matched by name, snapshots by `(project, report_date)`).
-
----
-
-## Step 4 — NocoDB Data Entry
-
-See **[nocodb/setup_instructions.md](nocodb/setup_instructions.md)** for the full
-walkthrough. In short:
-
-1. Open <http://localhost:8080> and create the admin account.
-2. **Settings ▸ Data Sources ▸ Add ▸ PostgreSQL** → host `postgres`, port `5432`,
-   database `evm_db`, user/password from `.env`.
-3. On `project_snapshot`, add a **Form view** named *Submit Periodic Report*
-   with the progress/financial fields, plus a **sub-form** on
-   `snapshot_contractor_headcount` for per-trade headcount.
-4. Create the three roles: **Admin**, **Editor** (data entry), **Viewer**.
-   Clerks get Editor on the two fact tables only; managers get Viewer.
-
----
-
-## Step 5 — Analytics Agent
-
-### Install
-
-```bash
-pip install -r agent/requirements.txt
-```
-
-### Configure
-
-The agent **requires** an explicit read-only connection string — it will not
-fall back to a privileged one. Create `agent/.env`:
-
-```bash
-ANALYTICS_DB_URL=postgresql://analytics_readonly:readonly_secret_pass@localhost:5433/evm_db
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
-`analytics_readonly` is created by `db/schema.sql` with SELECT-only grants.
-**Change its password** on your server:
-
-```sql
-ALTER ROLE analytics_readonly WITH PASSWORD 'your_strong_password';
-```
-
-Credentials for Claude resolve from `ANTHROPIC_API_KEY` (or an `ant auth login`
-profile). Do not reuse the admin database password here.
-
-### Use
-
-```bash
-# Single question
-python agent/cli.py "which projects have CPI below 0.9?"
-
-# Interactive
-python agent/cli.py
-
-# Interactive with SQL trace
-python agent/cli.py -v
-
-# Predefined deviation checks (cost overrun, schedule slip, headcount)
-python agent/cli.py --checks
-
-# Inspect the live schema the agent sees
-python agent/cli.py --schema
-```
-
-Example questions it answers:
-
-- «کدام پروژه‌ها CPI کمتر از ۰.۹ دارند؟» — which projects have CPI below 0.9?
-- "How has project X's SPI trended over the last 6 months?"
-- "Which projects are over budget *and* behind schedule?"
-- "Compare headcount by trade across projects last month."
-
-The agent writes SQL, executes it through the read-only tool, then **explains**
-the result — likely cause, which supporting columns point that way, and what to
-check next. It does not merely restate the numbers.
-
-### Safety
-
-Two independent layers, because the SQL is model-generated:
-
-1. The connection uses `analytics_readonly` (SELECT-only grants).
-2. `run_sql` rejects any statement that is not a single `SELECT`/`WITH`, runs
-   inside a `READ ONLY` transaction with a 15s `statement_timeout`, and caps
-   results at 500 rows.
-
----
-
-## Step 6 — Deploying to Your Own Server
-
-1. Install Docker + Docker Compose on the server.
-2. Copy this directory over (`scp -r`, or `git clone`).
-3. Create `.env` with **production** secrets — do not reuse the dev values.
-4. `docker compose up -d`
-5. Put NocoDB behind a reverse proxy with TLS (nginx/Caddy).
-6. Edit `db/schema.sql`'s `analytics_readonly` password (or `ALTER ROLE` after
-   first boot) and set `ANALYTICS_DB_URL` accordingly.
-7. Verify backups are appearing: `ls -la backups/`
-8. Schedule the agent's `--checks` run if you want periodic deviation reports.
-
-### Backup / Restore
-
-Nightly backups run automatically in the `postgres-backup` service (uses the
-same `postgres:16-alpine` image, no extra pull). Backups land in `./backups/`
-with 14 daily / 8 weekly / 6 monthly retention.
-
-On-demand manual dump:
-
-```bash
-./backup/backup.sh
-```
-
-Restore a dump (manual or nightly):
-
-```bash
-gunzip -c backups/manual/evm_db_2026-09-26_120000.sql.gz | \
-  docker exec -i evm-postgres psql -U evm_admin -d evm_db
-```
-
-Or from the nightly `daily/` or `weekly/` folders under `./backups/`.
-
-Test a restore into a scratch database before you need it in anger.
-
----
-
-## Troubleshooting: Docker Registry Access
-
-If `docker compose pull` or `docker compose up` fails with `TLS handshake timeout`,
-your network blocks Docker Hub. Two options:
-
-**Option A — Use a registry mirror (recommended).**  
-In Docker Desktop ▸ Settings ▸ Docker Engine, add:
-
-```json
-{
-  "registry-mirrors": [
-    "https://docker.m.daocloud.io",
-    "https://mirror.gcr.io",
-    "https://docker.iranserver.com"
-  ]
-}
-```
-
-Then restart Docker Desktop and `docker compose pull`.
-
-**Option B — Pre-pull on a machine that can reach Docker Hub.**  
-```bash
-docker pull postgres:16-alpine
-docker pull nocodb/nocodb:latest
-docker save postgres:16-alpine nocodb/nocodb:latest -o images.tar
-# copy images.tar to the server
-docker load -i images.tar
-```
-
-The `postgres-backup` service reuses `postgres:16-alpine`, so only **two images**
-must be pulled/saved.
-
-> Note: if you are on a network with Cloudflare WARP / ProxyBridge / similar,
-> the Docker daemon's WSL2 backend often does **not** inherit the host proxy.
-> A registry mirror is the most reliable fix.
-
----
-
-## Schema Notes
-
-The wide Excel layout is normalized into rows, so adding a REV4 or a new trade
-never requires a schema change:
+The wide Excel layout is normalized into rows, so adding a REV4 or a new trade never
+requires a schema change:
 
 | Excel shape | Becomes |
 |---|---|
 | `REV0..REV3` amount + duration columns | rows in `contract_revision` |
-| Repeated extension columns (`تمدید اول/دوم/سوم`) | rows in `contract_extension` |
+| `تمدید اول/دوم/سوم` columns | rows in `contract_extension` |
 | `REV0..REV3` progress + EV/PV columns | rows in `snapshot_revision_progress` |
 | 18 contractor headcount columns | rows in `snapshot_contractor_headcount` |
 
-Analysis helpers (in `db/schema.sql`):
+Three facts about the real data that shape the schema:
 
-- `v_project_latest_snapshot` — latest **reported** period per project, with `sv`/`cv`
-- `v_evm_distress_alerts` — the same, plus a `health_status` label
-- `v_snapshot_total_headcount` — total headcount per report
-- `v_project_revision_progress` — per-REV progress/EV/PV with `revision_spi`
-- `v_project_reporting_status` — actual vs planned periods, and the last real report date
-
-### Three things about the real data that shape the schema
-
-These were discovered by profiling `14050617-Dashboards.xlsm` and are worth
-knowing before you trust any query:
-
-**1. Every project has future-dated rows with no data.**
-The workbook pre-fills planned periods out to contract completion. So
-`MAX(report_date)` per project returns an *empty* row for all projects. `v_project_latest_snapshot`
-therefore picks the latest period that actually carries reported values. Use
-`v_project_reporting_status` to see how stale a project is.
-
-**2. Progress and ratio columns are fractions, not percentages.**
-`progress_physical_actual = 0.45` means 45%. This is stored as-is — no rescaling.
-Multiply by 100 when presenting. Monetary columns are in Rial.
-
-**3. `headcount` is a monthly average and is fractional.**
-Values like `17.37` people appear throughout. The column is `NUMERIC(10,2)`, not
-`INT` — an integer column would have silently truncated real data.
-
-`cpi` is usually NULL because it needs actual cost, which is booked late. A NULL
-CPI is missing information, not a zero.
+1. **Every project has future-dated rows with no data** (the workbook pre-fills planned
+   periods to contract end). `MAX(report_date)` returns an empty row — that's why
+   `v_project_latest_snapshot` picks the latest period *with* reported values, and why
+   the trigger-maintained `last_report_date` filters on actual progress.
+2. **Progress and ratio columns are fractions** (`0.45` = 45%). Monetary columns are Rial.
+3. **Headcount is a fractional monthly average** (`17.37` people is normal) — the column
+   is `NUMERIC(10,2)`, not `INT`. `cpi` is usually NULL because actual cost books late —
+   NULL is missing information, not zero.
 
 ---
 
 ## Troubleshooting
 
-**NocoDB shows no tables.** It connected to the wrong database. Check the data
-source points at `evm_db`, not NocoDB's internal default.
-
-**Port already in use.** Change `POSTGRES_HOST_PORT` / `NOCODB_HOST_PORT` in `.env`.
-
-**`schema.sql` didn't run.** It only executes when the Postgres data volume is
-empty (first boot). Apply it manually:
+**Docker Hub unreachable** (`TLS handshake timeout` on `docker compose up`): this
+network blocks Docker Hub and most mirrors. Either configure a registry mirror in
+Docker Desktop ▸ Settings ▸ Docker Engine (values that have worked: `docker.1panel.live`
+is China-only; try `dockerhub.timeweb.cloud`, `hub.rat.dev`, `mirror.gcr.io` — availability
+varies), or pre-pull on a connected machine and `docker save | docker load`:
 
 ```bash
-docker exec -i evm-postgres psql -U evm_admin -d evm_db < db/schema.sql
+docker pull postgres:16-alpine directus/directus:11 node:20-alpine
+docker save postgres:16-alpine directus/directus:11 node:20-alpine -o images.tar
+# copy images.tar to the offline machine, then:
+docker load -i images.tar && docker compose up -d
 ```
 
-**Migration mapped the wrong column.** Run `--dry-run`, then adjust the relevant
-regex in `migration/mapping.yaml`.
+(`node:20-alpine` is only needed to build the webapp image.)
 
-**Docker Hub unreachable.** On networks where Docker Hub is blocked, configure a
-registry mirror in Docker Desktop ▸ Settings ▸ Docker Engine, or pre-pull the
-images on a machine that can reach it.
+**Container shows `unhealthy`**: check `docker inspect evm-directus
+--format '{{json .State.Health}}'`. The compose healthchecks use `127.0.0.1` on purpose
+— `localhost` resolves to IPv6 inside the container and Directus listens on IPv4 only.
+
+**Port already in use**: change `POSTGRES_HOST_PORT` / `WEBAPP_HOST_PORT` /
+`DIRECTUS_HOST_PORT` in `.env`. Port 3000 has a Windows socket reservation on this
+machine — use 3600 (already the default).
+
+**`schema.sql` didn't run**: it only executes when the Postgres volume is empty. Apply
+manually: `docker exec -i evm-postgres psql -U evm_admin -d evm_db < db/schema.sql`.
+
+**Restore conflicts**: always `pg_restore --clean --if-exists`, and restart the
+Directus container after a restore.
+
+**Map has no pins**: projects need `موقعیت روی نقشه` (location) set — full-width map
+field on each project's detail page.
