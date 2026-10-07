@@ -1,0 +1,18 @@
+{
+  "name": "directus-extension-fa-display",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Jalali (Shamsi) dates and Persian digits for the Directus app",
+  "directus:extension": {
+    "type": "display",
+    "path": "dist/index.js",
+    "source": "src/index.js",
+    "host": "^10.10.0"
+  },
+  "scripts": {
+    "build": "directus-extension build"
+  },
+  "devDependencies": {
+    "@directus/extensions-sdk": "^11"
+  }
+}

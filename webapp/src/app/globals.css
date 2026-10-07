@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Vazirmatn', 'Tahoma', ui-sans-serif, system-ui, sans-serif;
+
+  /* corporate palette — see DESIGN.md */
+  --color-navy-950: #081428;
+  --color-navy-900: #0b1f3a;
+  --color-navy-800: #12294d;
+  --color-navy-700: #1b3a66;
+  --color-canvas: #eef2f7;
+}
+
+html {
+  font-family: var(--font-sans);
+}
+
+body {
+  @apply text-slate-800 antialiased;
+  background-color: var(--color-canvas);
+}
+
+/* Numeric inputs stay LTR inside the RTL layout */
+.dir-ltr,
+input[type='number'] {
+  direction: ltr !important;
+  text-align: left;
+}
+
+/* dim empty numeric cells so real values pop out */
+.evm-cell-null {
+  color: #94a3b8;
+}
+
+/* ---- shared component classes ---- */
+
+/* white elevated card */
+.evm-card {
+  @apply bg-white border border-slate-200 rounded-xl;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 8px 24px -16px rgba(15, 23, 42, 0.18);
+}
+
+/* text input (used by date pickers + plain inputs) */
+.evm-input {
+  @apply w-full text-[13px] bg-white border border-slate-300 rounded-lg h-9 px-2.5 text-slate-700 outline-none transition;
+  border-color: #cbd5e1;
+}
+.evm-input:focus {
+  border-color: #1d4ed8;
+  box-shadow: 0 0 0 3px #dbeafe;
+}
+.evm-input:disabled {
+  @apply bg-slate-50 text-slate-400;
+}
+
+/* ---- AG Grid fine-tuning (theme params live in grid-setup.ts) ---- */
+.ag-root-wrapper {
+  direction: rtl;
+}
+.ag-header-cell-text {
+  font-weight: 700;
+  color: #0f172a;
+}
+.ag-cell {
+  line-height: 1.9;
+  font-variant-numeric: tabular-nums;
+}
+.evm-header .ag-header-cell-label {
+  justify-content: center;
+}
+
+/* date picker popup above everything */
+.rmdp-wrapper,
+.rmdp-container {
+  width: 100%;
+}
+.rmdp-container input {
+  width: 100%;
+}
+.rmdp-calendar-container-mobile,
+.rmdp-top-class {
+  z-index: 200 !important;
+}
+
+/* subtle scrollbars */
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 6px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}

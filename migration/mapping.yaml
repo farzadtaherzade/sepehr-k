@@ -1,0 +1,152 @@
+# =============================================================================
+# Column mapping for migrate.py -- written against the REAL workbook
+# ("14050617-Dashboards.xlsm", sheet "Master Database", 83 columns).
+#
+# Matching: each pattern is a regex (case-insensitive) tested against the
+# normalized Excel header (whitespace collapsed, newlines -> spaces). Patterns
+# are tried in order and the FIRST match wins, so put the most specific first.
+#
+# If the source workbook gains columns later, add a line here - no code change.
+# Verify with:  python migrate.py --inspect <file>
+# =============================================================================
+
+project:
+  name_patterns:
+    - "^نام پروژه$"
+    - "^نام"
+  start_date_patterns:
+    - "^شروع پیمان$"
+    - "شروع قرارداد"
+    - "contract[_ ]?start"
+
+# --- Contract revisions -----------------------------------------------------
+# Source headers look like:
+#   "مبلغ اولیه پیمان (مبلغ برنامه REV0)"   "مبلغ برنامه REV1"
+#   "مدت اولیه پروژه (مدت برنامه REV0)"     "مدت برنامه REV1"
+# "اولیه" (initial) means REV0. The capture group must yield the revision no.
+revision:
+  amount_patterns:
+    - "مبلغ برنامه REV\\s*(\\d)"          # مبلغ برنامه REV1 / REV2 / REV3
+    - "مبلغ برنامه\\s+(\\d)"              # tolerates a space instead of REV
+    - "^مبلغ اولیه پیمان"                  # initial contract amount -> REV0
+  duration_patterns:
+    - "مدت برنامه REV\\s*(\\d)"
+    - "مدت برنامه\\s+(\\d)"
+    - "^مدت اولیه پروژه"                   # initial duration -> REV0
+
+# --- Extensions -------------------------------------------------------------
+# "مدت تمدید اول" / "مدت تمدید دوم" / "مدت تمدید سوم"
+extension:
+  duration_patterns:
+    - "تمدید اول"
+    - "تمدید دوم"
+    - "تمدید سوم"
+  # ordinal word -> extension number (used by migrate.py)
+  ordinal_map:
+    "اول": 1
+    "دوم": 2
+    "سوم": 3
+
+# --- Snapshot: scalar columns of project_snapshot ---------------------------
+snapshot:
+  report_date_patterns:
+    - "^تاریخ$"                            # the report date column (col B)
+    - "تاریخ گزارش"
+    - "report[_ ]?date"
+  revision_no_patterns:
+    - "^REV$"
+    - "شماره ریوایزن"
+
+  # Current progress -- cols 64/65. Verified equal to the REV0 columns "برنامه اولیه".
+  progress_physical_actual_patterns:
+    - "^پیشرفت فیزیکی$"
+  progress_physical_planned_patterns:
+    - "^پیشرفت برنامه ای$"
+  progress_rial_actual_patterns:
+    - "^پیشرفت ریالی قرارداد$"
+  progress_rial_planned_patterns:
+    - "^درصد پیشرفت برنامه ای \\(وزن ریالی\\) REV0"
+    - "^درصد پیشرفت برنامه ای \\(وزن ریالی\\)"
+
+  time_elapsed_days_patterns:
+    - "^مدت زمان سپری شده$"
+  time_progress_pct_patterns:
+    - "^پیشرفت زمانی$"
+
+  # Financials -- note the workbook already stores these in Rial.
+  gross_payment_patterns:
+    - "^مجموع ناخالص پرداختی کارفرما$"
+  net_payment_patterns:
+    - "^مجموع خالص پرداختی کارفرما$"
+  actual_cost_patterns:
+    - "^هزینه واقعی"
+    - "^AC$"
+  overhead_cost_patterns:
+    - "^هزینه بالاسری$"
+  equipment_cost_patterns:
+    - "^هزینه های تجهیز$"
+  commitments_patterns:
+    - "^تعهدات$"
+  revenue_patterns:
+    - "^درآمد$"
+  production_patterns:
+    - "^تولید$"
+
+  # EVM -- cols 80-83 are the project-level current figures.
+  pv_patterns:
+    - "^PV$"
+  ev_patterns:
+    - "^EV$"
+  spi_patterns:
+    - "^SPI$"
+  cpi_patterns:
+    - "^CPI$"
+
+  # Extra metrics the workbook's own dashboards use.
+  last_progress_statement_patterns:
+    - "^آخرین صورت وضعیت تجمعی کارکرد تایید شده$"
+  last_adjustment_statement_patterns:
+    - "^آخرین صورت وضعیت تجمعی تعدیل تایید شده$"
+  revenue_to_cost_ratio_patterns:
+    - "^نسبت درآمد به هزینه$"
+  overhead_to_production_ratio_patterns:
+    - "^نسبت بالاسری به تولید$"
+  equipment_to_production_ratio_patterns:
+    - "^نسبت هزینه های تجهیز به تولید$"
+  commitments_to_production_ratio_patterns:
+    - "^نسبت تعهدات به تولید$"
+  collection_rate_patterns:
+    - "^درصد وصول مطالبات$"
+  avg_monthly_headcount_patterns:
+    - "^متوسط نیروی انسانی پیمانکار در ماه$"
+
+# --- Per-revision progress (normalized into snapshot_revision_progress) -----
+# For every revision found, capture these four progress series plus EV and PV.
+revision_progress:
+  # NOTE: these four patterns must be mutually exclusive. The (وزن فیزیکی) vs
+  # (وزن ریالی) distinction is what separates physical from monetary progress,
+  # so each pattern pins both the actual/planned word and the weight type.
+  progress_physical_actual_patterns:
+    - "^درصد پیشرفت واقعی \\(وزن فیزیکی\\)"
+  progress_physical_planned_patterns:
+    - "^درصد پیشرفت برنامه ای \\(وزن فیزیکی\\)"
+  progress_rial_actual_patterns:
+    - "^درصد پیشرفت واقعی \\(وزن ریالی\\)"
+  progress_rial_planned_patterns:
+    - "^درصد پیشرفت برنامه ای \\(وزن ریالی\\)"
+  ev_patterns:
+    - "^ارزش کسب شده \\(EV\\)"
+  pv_patterns:
+    - "^ارزش برنامه ریزی شده \\(PV\\)"
+  # "برنامه اولیه" (initial) means revision 0; "برنامه REV<n>" means revision n.
+  initial_label: "برنامه اولیه"
+
+# --- Headcount --------------------------------------------------------------
+# Cols 28-45 are per-trade headcount for the report period. The trade name is
+# taken from the header itself, stripped of the "پیمانکار" prefix.
+headcount:
+  column_patterns:
+    - "^(پیمانکار|ستادی|روزمزد)"
+  # Prefixes removed from the header to derive the trade label.
+  strip_prefixes:
+    - "پیمانکار"

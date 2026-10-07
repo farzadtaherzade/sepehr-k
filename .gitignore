@@ -1,0 +1,11 @@
+.env
+backups/
+.testdb/
+*.pyc
+__pycache__/
+sample_master_database.xlsx
+
+# heavy build artifacts
+node_modules/
+.next/
+*.log

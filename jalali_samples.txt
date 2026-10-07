@@ -1,0 +1,28 @@
+Row 2: greg_report=2025-11-21 00:00:00, jalali2='1404/08/30', jalali3=None
+Row 3: greg_report=2025-12-21 00:00:00, jalali2='1404/09/30', jalali3=None
+Row 4: greg_report=2026-01-20 00:00:00, jalali2='1404/10/30', jalali3=None
+Row 5: greg_report=2026-02-19 00:00:00, jalali2='1404/11/30', jalali3=None
+Row 6: greg_report=2026-03-20 00:00:00, jalali2='1404/12/29', jalali3=None
+Row 7: greg_report=2026-04-20 00:00:00, jalali2='1405/01/31', jalali3=None
+Row 8: greg_report=2026-05-21 00:00:00, jalali2='1405/02/31', jalali3=None
+Row 9: greg_report=2026-06-21 00:00:00, jalali2='1405/03/31', jalali3=None
+Row 10: greg_report=2026-07-22 00:00:00, jalali2='1405/04/31', jalali3='1405/04/31'
+Row 11: greg_report=2026-08-22 00:00:00, jalali2='1405/05/31', jalali3=None
+Row 12: greg_report=2026-09-08 00:00:00, jalali2='1405/06/17', jalali3=None
+Row 13: greg_report=2026-09-22 00:00:00, jalali2='1405/06/31', jalali3=None
+Row 14: greg_report=2026-10-22 00:00:00, jalali2='1405/07/30', jalali3=None
+Row 15: greg_report=2026-11-21 00:00:00, jalali2='1405/08/30', jalali3=None
+Row 16: greg_report=2026-12-21 00:00:00, jalali2='1405/09/30', jalali3=None
+...
+
+Rows with jalali3 filled (29):
+Row 10: greg_start=2025-11-10 00:00:00, jalali3='1405/04/31'
+Row 29: greg_start=2025-07-23 00:00:00, jalali3='1404/06/31'
+Row 38: greg_start=2025-07-23 00:00:00, jalali3='1405/03/31'
+Row 65: greg_start=2025-11-09 00:00:00, jalali3='1405/03/31'
+Row 73: greg_start=2025-05-10 00:00:00, jalali3='1404/05/31'
+Row 74: greg_start=2025-05-10 00:00:00, jalali3='1404/06/31'
+Row 83: greg_start=2025-05-10 00:00:00, jalali3='1405/03/31'
+Row 98: greg_start=2025-09-20 00:00:00, jalali3='1404/09/30'
+Row 104: greg_start=2025-09-20 00:00:00, jalali3='1405/03/31'
+Row 125: greg_start=2025-04-05 00:00:00, jalali3='1404/05/31'

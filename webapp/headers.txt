@@ -1,0 +1,14 @@
+HTTP/1.1 200 OK
+X-Frame-Options: DENY
+X-Content-Type-Options: nosniff
+Referrer-Policy: same-origin
+Permissions-Policy: camera=(), microphone=(), geolocation=()
+Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+vary: rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch
+content-type: application/json
+set-cookie: evm_session=eyJhbGciOiJIUzI1NiJ9.eyJ1aWQiOjEsInVzZXJuYW1lIjoiYWRtaW4iLCJuYW1lIjoi2YXYr9uM2LEg2LPYp9mF2KfZhtmHIiwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzkxMjc2Nzc3LCJqdGkiOiI0NTQ4MzYyMy05YWZlLTQ4OTMtYmU3Zi0yZjQ1ZTcxOWM5ZmMiLCJleHAiOjE3OTEzMDU1Nzd9.e4SQ1xJdOjuIR21k6ZCz5chLuG3ozGwe8gXQ01x3xrk; Path=/; Expires=Tue, 06 Oct 2026 16:52:57 GMT; Max-Age=28800; HttpOnly; SameSite=lax
+Date: Tue, 06 Oct 2026 08:52:57 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+Transfer-Encoding: chunked
+
