@@ -335,3 +335,18 @@ Panel option shapes match Directus 11 core panels (`metric` = collection/field/f
 `bar-chart` = collection/xAxis/yAxis/function/filter, `line-chart` = collection/xAxis/yAxis/
 aggregation). The user's own «test» dashboard was left untouched. To add more panels use
 Settings ▸ Insights edit mode — e.g. a `variable` panel to filter charts by project.
+
+---
+
+## 17. Sample Projects + Map Layout (2026-10-07) — branch `feature/samples-and-map`
+
+- Five example projects added, all suffixed **(نمونه)** so they are easy to tell apart and
+  filter: مجتمع مسکونی آفتاب، برج اداری نگین، پل و تقاطع دریا، کارخانه بتن آماده زاگرس،
+  بهسازی راه ساحلی خلیج فارس. Each has REV0, one snapshot and two headcount rows.
+- `dim_project.location` (JSONB GeoJSON Point) + Directus `map` interface.
+- Bookmark **«نقشه پروژه‌ها»** on dim_project opens the map layout (clustered pins).
+- Approximate city-level locations set for ساری، پیشوا، مروارید کیش — replace with real
+  coordinates when known.
+- Registry note: Docker Hub and most mirrors are blocked on this network, so the PostGIS
+  image could not be pulled; the map works via the GeoJSON column (no bbox filter). If a
+  VPN/mirror becomes available, migrate the column to geometry(Point,4326).

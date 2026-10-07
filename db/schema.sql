@@ -435,3 +435,12 @@ CREATE TRIGGER trg_headcount_stats
 AFTER INSERT OR UPDATE OF snapshot_id, contractor_category_id, headcount OR DELETE
 ON snapshot_contractor_headcount FOR EACH ROW
 EXECUTE FUNCTION sync_headcount_stats_with_row();
+
+-- =============================================================================
+-- Project map location (2026-10-07)
+-- GeoJSON Point stored as JSONB + Directus 'map' interface (map layout renders
+-- it without PostGIS). Docker Hub is blocked on the deployment network, so the
+-- postgis/postgis image could not be pulled; when a PostGIS image is available
+-- this column can be migrated to geometry(Point,4326) for bbox filtering.
+-- =============================================================================
+ALTER TABLE dim_project ADD COLUMN IF NOT EXISTS location JSONB;

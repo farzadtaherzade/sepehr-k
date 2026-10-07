@@ -2,6 +2,9 @@ name: evm-platform
 
 services:
   postgres:
+    # NOTE: stock postgres image — Docker Hub is blocked on this network, so the
+    # PostGIS image couldn't be pulled. The map layout works anyway via a JSON
+    # GeoJSON column (dim_project.location) with the 'map' interface.
     image: postgres:16-alpine
     container_name: evm-postgres
     restart: unless-stopped
