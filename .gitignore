@@ -9,5 +9,6 @@ sample_master_database.xlsx
 node_modules/
 .next/
 *.log
+*.dump
 .env.local
 .env*.local
