@@ -62,8 +62,8 @@ Generate the secrets with `openssl rand -hex 32`:
 
 | App | Login | Notes |
 |---|---|---|
-| Web App (3600) | `ADMIN_USERNAME` / `ADMIN_PASSWORD` from `.env` | forces a password change on first login |
-| Directus (8080) | `DIRECTUS_ADMIN_EMAIL` / `DIRECTUS_ADMIN_PASSWORD` from `.env` | created only on very first boot |
+| Web App (3600) | `ADMIN_USERNAME` / `ADMIN_PASSWORD` from `.env` | forces a password change on first login — see *Accounts & Passwords* |
+| Directus (8080) | `DIRECTUS_ADMIN_EMAIL` / `DIRECTUS_ADMIN_PASSWORD` from `.env` | created only on very first boot; all later accounts are created inside Directus |
 
 ---
 
@@ -80,9 +80,8 @@ python migration/migrate.py "path/to/14050617-Dashboards.xlsm"             # mig
 Column mapping lives in `migration/mapping.yaml` (regex per Persian header) — edit the
 yaml, not the code. No workbook at hand? `python migration/make_sample_excel.py`.
 
-**Option 2 — restore a database dump** from the machine that already has the data
-(see *Sharing with a friend* below — this also carries the whole Directus
-configuration, users, theme and dashboards).
+**Option 2 — restore a database dump** (see *Backup & Restore* below — a full dump
+carries the data *and* the whole Directus configuration, users, theme and dashboards).
 
 ### Directus configuration on a fresh database
 
@@ -132,72 +131,62 @@ database**. On a truly fresh install you get an empty admin. Two paths:
 
 ---
 
-## Sharing with a Friend
+## Accounts & Passwords
 
-> The friend needs Docker Desktop and (on networks where Docker Hub is blocked) either a
-> registry mirror or the pre-pulled images — see *Troubleshooting* at the bottom.
+There are **three independent credential sets** — they look similar but are completely
+separate systems:
 
-### Option A — Git + a full database dump (recommended)
+| System | Login with | Where it comes from |
+|---|---|---|
+| PostgreSQL | user + password | `POSTGRES_USER` / `POSTGRES_PASSWORD` in `.env` (database owner) |
+| **Web App** (3600) | **username** + password (e.g. `admin`) | `ADMIN_USERNAME` / `ADMIN_PASSWORD` in `.env` — used **only** to create the account on first startup; the app forces a password change at first login |
+| **Directus** (8080) | **email** + password (e.g. `admin@gmail.com`) | created **inside Directus itself** — not from `.env` |
 
-Everything is already committed locally (branch `feature/samples-and-map`). Push it:
+The web app and Directus do **not** share accounts: the web app's username/password is
+different from your Directus email/password, and changing one never affects the other.
+`DIRECTUS_ADMIN_EMAIL` / `DIRECTUS_ADMIN_PASSWORD` in `.env` only seed the very first
+admin when the database is empty; after that, every Directus user is created and managed
+in the app (**Settings ▸ Users**) and lives in the database — editing `.env` afterwards
+changes nothing.
 
-```bash
-# one-time: create a PRIVATE repo on GitHub/GitLab, then
-git remote add origin <your-repo-url>
-git push -u origin main feature/samples-and-map
-```
+---
 
-Your friend:
+## Backup & Restore
 
-```bash
-git clone <your-repo-url> && cd evm-platform
-git checkout feature/samples-and-map
-cp .env.example .env           # set their own passwords/secrets (any values work
-                               # except POSTGRES_*, which must match the dump restore)
-docker compose up -d postgres  # start the database first
-```
-
-Then copy the dump from you and restore it **before** starting the rest:
-
-```bash
-docker cp evm_full.dump evm-postgres:/tmp/
-docker exec evm-postgres pg_restore -U evm_admin -d evm_db --clean --if-exists /tmp/evm_full.dump
-docker compose up -d           # Directus + webapp come up already configured
-```
-
-**You** create the dump (it carries data *and* all Directus configuration, users,
-theme, dashboards):
+Nightly backups run automatically into `./backups/` (14 daily / 8 weekly / 6 monthly
+retained). For an on-demand full backup — a single file that carries the data **and** the
+whole Directus configuration, users, theme, dashboards and webapp accounts:
 
 ```bash
 docker exec evm-postgres pg_dump -U evm_admin -d evm_db -Fc -f /tmp/evm_full.dump
 docker cp evm-postgres:/tmp/evm_full.dump ./evm_full.dump
 ```
 
-> Only `POSTGRES_PASSWORD` has to match between your `.env` and your friend's (the
-> dump carries the roles' passwords). Everything else — keys, secrets — can differ.
+> In PowerShell run the two lines separately (`&&` is not supported there).
 
-### Option B — zip the folder
-
-Zip the project **without** `.env`, `node_modules/`, `backups/` (they're git-ignored
-anyway) plus `evm_full.dump`. Friend unzips → same steps as Option A. Simple, but
-they won't get your future commits.
-
-### Option C — live access over the internet (no install for the friend)
+Restoring replaces the current database with the dump's contents:
 
 ```bash
-./expose-public-url.sh        # tunnels https://<random>.lhr.life -> localhost:8080
-./expose-public-url.sh --stop # when done
+docker cp evm_full.dump evm-postgres:/tmp/evm_full.dump
+docker exec evm-postgres pg_restore -U evm_admin -d evm_db --clean --if-exists /tmp/evm_full.dump
+docker compose restart directus webapp
 ```
 
-Your friend opens the printed HTTPS URL and uses your **existing Directus login** —
-no setup at all. Caveats: the URL is public and rotates on restart; Directus (not the
-webapp) is what gets exposed; stop the tunnel when finished.
+Notes:
 
-### What the friend will NOT get from git alone
-
-Directus configuration and your data live in the database volume, not in the repo —
-that's why the dump matters. The repo *does* include the whole schema (`db/schema.sql`,
-auto-applied on first boot), the Excel migration, and the `fa-display` extension.
+- The dump is **complete and self-contained** — restoring it onto a fresh database
+  reproduces the entire system exactly (verified end-to-end): data, Persian field
+  labels, dashboards, map bookmark, users.
+- Only `POSTGRES_PASSWORD` must match between the machine that made the dump and the
+  target — the dump carries the database roles' passwords, but the container itself
+  authenticates with the value in the target's `.env`.
+- The dump carries the **webapp accounts too** (`app_user` table), so the target's
+  `.env` bootstrap password is ignored unless no account exists yet.
+- `pg_restore` prints warnings about cluster-level roles (e.g. `analytics_readonly`)
+  that are not part of a database dump — they are harmless; recreate the role with
+  `CREATE ROLE` if you use the analytics agent on the target machine.
+- Test restores with `--clean --if-exists` into a scratch database first; restart the
+  Directus container after any restore.
 
 ---
 
